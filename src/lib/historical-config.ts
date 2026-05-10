@@ -8,17 +8,17 @@
 export const CURRENT_YEAR = new Date().getFullYear();
 
 /**
- * Earliest date BBM has filled in any prior year (year-agnostic MM-DD).
+ * Earliest date a BBM finalist team was drafted in BBM V (2024).
  * The date picker uses this — projected onto the current year — as its min.
- * Update with the actual earliest historical fill date.
  */
-export const EARLIEST_HISTORICAL_FILL_MMDD = "08-15";
+export const EARLIEST_HISTORICAL_FILL_MMDD = "06-02";
 
 /**
- * Latest selectable projected completion date (year-agnostic MM-DD).
- * The date picker uses this — projected onto the current year — as its max.
+ * Latest date a BBM V (2024) finalist team was drafted. No finalist team
+ * was drafted in September. The date picker uses this — projected onto the
+ * current year — as its max.
  */
-export const LATEST_COMPLETION_MMDD = "09-09";
+export const LATEST_COMPLETION_MMDD = "08-31";
 
 /**
  * BBM officially opens the Monday after the NFL Draft. The NFL Draft is
@@ -32,35 +32,40 @@ export const BBM_OPEN_DATES: Record<number, string> = {
 };
 
 /**
- * Historical distribution of when BBM finalist teams were drafted, by week
- * of the cycle (week 0 = open week). Values are weights; they will be
- * normalized at runtime so they don't have to sum to 1.
- *
- * Reference window: ~19 weeks (open through NFL Week 1). Replace with your
- * own values when you have them — these are reasonable seed defaults that
- * back-load drafts toward late August / early September, mirroring observed
- * finalist patterns from past BBMs.
+ * Real BBM V (2024) finalist draft distribution — daily counts of finalist
+ * teams by `draft_filled_time`, indexed from the BBM open day (2024-04-29)
+ * through 2024-08-31 (125 days). Source: 539 finalist drafts.
+ * No finalist team was drafted in September.
  */
 export const FINALIST_DRAFT_DISTRIBUTION: number[] = [
-  0.5, // wk 0 — open week (low: sharps testing the waters)
-  0.8,
-  1.2,
-  1.6,
-  2.0,
-  2.4,
-  2.8, // mid May
-  3.2,
-  3.6,
-  4.0,
-  4.5,
-  5.5,
-  6.5, // mid July
-  8.0,
-  10.0,
-  12.0,
-  14.0, // mid-late Aug peak
-  12.0,
-  9.0, // final week pre-kickoff
+  7, 5, 6, 3, 5, 6, 4, 1, 6, 6, 2, 0, 1, 2, 2, 0, 3, 5, 1, 1, 3, 3, 3, 2, 3,
+  3, 0, 2, 4, 3, 1, 2, 3, 2, 6, 4, 0, 4, 4, 0, 3, 3, 0, 3, 1, 4, 2, 2, 2, 3,
+  4, 3, 2, 1, 2, 2, 0, 3, 2, 6, 4, 4, 1, 6, 8, 2, 3, 4, 2, 2, 5, 2, 1, 5, 1,
+  4, 3, 2, 1, 3, 2, 0, 0, 3, 4, 3, 1, 6, 4, 3, 4, 4, 2, 5, 3, 3, 1, 7, 3, 5,
+  6, 3, 8, 5, 12, 10, 11, 4, 14, 6, 7, 6, 8, 8, 9, 12, 10, 10, 15, 10, 10,
+  14, 20, 15, 14,
+];
+
+/**
+ * BBM V (2024) finalist teams by month, derived from the same source.
+ * Total finalists: 539. April covers the open week only (4/29–4/30).
+ */
+export type MonthBreakdownEntry = {
+  month: string; // e.g. "August"
+  monthIndex: number; // 1-12
+  count: number;
+  pct: number; // 0..1
+};
+
+export const FINALIST_TOTAL = 539;
+
+export const FINALIST_MONTH_BREAKDOWN: MonthBreakdownEntry[] = [
+  { month: "April (open week)", monthIndex: 4, count: 12, pct: 12 / 539 },
+  { month: "May", monthIndex: 5, count: 86, pct: 86 / 539 },
+  { month: "June", monthIndex: 6, count: 77, pct: 77 / 539 },
+  { month: "July", monthIndex: 7, count: 95, pct: 95 / 539 },
+  { month: "August", monthIndex: 8, count: 269, pct: 269 / 539 },
+  { month: "September", monthIndex: 9, count: 0, pct: 0 },
 ];
 
 export function getCurrentBbmOpenDate(year = CURRENT_YEAR): Date {
