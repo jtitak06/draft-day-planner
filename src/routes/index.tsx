@@ -2,14 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { SchedulerForm, type SchedulerFormValues } from "@/components/scheduler/SchedulerForm";
 import { ScheduleCalendar } from "@/components/scheduler/ScheduleCalendar";
-import { ScheduleTable } from "@/components/scheduler/ScheduleTable";
-import { BbmStatusBanner } from "@/components/scheduler/BbmStatusBanner";
+import { ScheduleAnalysis } from "@/components/scheduler/ScheduleAnalysis";
 import { ExportCsvButton } from "@/components/scheduler/ExportCsvButton";
 import { computeSchedule, type Schedule } from "@/lib/schedule";
 import {
+  DAY_OF_WEEK_WEIGHTS,
   FINALIST_DRAFT_DISTRIBUTION,
   getCurrentBbmOpenDate,
+  getLatestCompletionDate,
 } from "@/lib/historical-config";
+import { analyzeWindow, type WindowAnalysis } from "@/lib/analysis";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,15 +29,31 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
+  const [analysis, setAnalysis] = useState<WindowAnalysis | null>(null);
+  const [completedCount, setCompletedCount] = useState<number>(0);
 
   const handleSubmit = (values: SchedulerFormValues) => {
+    const cycleStart = getCurrentBbmOpenDate();
     const result = computeSchedule({
-      startDate: getCurrentBbmOpenDate(),
+      startDate: cycleStart,
       endDate: values.endDate,
-      totalEntries: values.totalEntries,
+      totalEntries: values.remaining,
       weights: FINALIST_DRAFT_DISTRIBUTION,
+      dayOfWeekWeights: DAY_OF_WEEK_WEIGHTS,
     });
     setSchedule(result);
+    setCompletedCount(values.completed);
+    setAnalysis(
+      analyzeWindow({
+        cycleStart,
+        cycleEnd: getLatestCompletionDate(),
+        windowStart: cycleStart,
+        windowEnd: values.endDate,
+        weights: FINALIST_DRAFT_DISTRIBUTION,
+        remaining: values.remaining,
+        completed: values.completed,
+      }),
+    );
   };
 
   return (
@@ -53,8 +71,6 @@ function Index() {
         </header>
 
         <div className="space-y-6">
-          <BbmStatusBanner />
-
           <section className="rounded-lg border bg-card p-6">
             <SchedulerForm onSubmit={handleSubmit} />
           </section>
@@ -67,7 +83,17 @@ function Index() {
                   <span className="font-medium text-foreground">
                     {schedule.totalEntries.toLocaleString()}
                   </span>{" "}
-                  drafts from{" "}
+                  remaining drafts
+                  {completedCount > 0 && (
+                    <>
+                      {" "}
+                      (<span className="font-medium text-foreground">
+                        {completedCount}
+                      </span>{" "}
+                      already complete)
+                    </>
+                  )}{" "}
+                  from{" "}
                   <span className="font-medium text-foreground">
                     {schedule.startDate}
                   </span>{" "}
@@ -80,18 +106,20 @@ function Index() {
                 <ExportCsvButton schedule={schedule} />
               </section>
 
+              {analysis && (
+                <section>
+                  <h2 className="mb-3 text-lg font-semibold text-foreground">
+                    Analysis
+                  </h2>
+                  <ScheduleAnalysis analysis={analysis} />
+                </section>
+              )}
+
               <section>
                 <h2 className="mb-3 text-lg font-semibold text-foreground">
                   Calendar
                 </h2>
                 <ScheduleCalendar schedule={schedule} />
-              </section>
-
-              <section>
-                <h2 className="mb-3 text-lg font-semibold text-foreground">
-                  Weekly breakdown
-                </h2>
-                <ScheduleTable schedule={schedule} />
               </section>
             </>
           )}
