@@ -13,11 +13,13 @@ import {
 import { cn } from "@/lib/utils";
 import {
   getEarliestSelectableEndDate,
-  getCurrentNflOpenerDate,
+  getLatestCompletionDate,
+  getTodayInPacific,
 } from "@/lib/historical-config";
 
 export type SchedulerFormValues = {
-  totalEntries: number;
+  completed: number;
+  remaining: number;
   endDate: Date;
 };
 
@@ -27,36 +29,58 @@ type Props = {
 
 export function SchedulerForm({ onSubmit }: Props) {
   const minDate = getEarliestSelectableEndDate();
-  const maxDate = getCurrentNflOpenerDate();
+  const maxDate = getLatestCompletionDate();
+  const today = getTodayInPacific();
+  const defaultDate =
+    today < minDate ? minDate : today > maxDate ? maxDate : today;
 
-  const [totalEntries, setTotalEntries] = useState<number>(150);
-  const [endDate, setEndDate] = useState<Date | undefined>(maxDate);
+  const [completed, setCompleted] = useState<number>(0);
+  const [remaining, setRemaining] = useState<number>(150);
+  const [endDate, setEndDate] = useState<Date | undefined>(defaultDate);
 
+  const total = completed + remaining;
+  const totalValid = total >= 1 && total <= 150 && completed >= 0 && remaining >= 0;
   const canSubmit =
-    totalEntries > 0 && endDate !== undefined && endDate >= minDate && endDate <= maxDate;
+    totalValid &&
+    remaining >= 1 &&
+    endDate !== undefined &&
+    endDate >= minDate &&
+    endDate <= maxDate;
 
   return (
     <form
-      className="grid gap-4 sm:grid-cols-3 sm:items-end"
+      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
       onSubmit={(e) => {
         e.preventDefault();
-        if (canSubmit && endDate) onSubmit({ totalEntries, endDate });
+        if (canSubmit && endDate) onSubmit({ completed, remaining, endDate });
       }}
     >
       <div className="space-y-2">
-        <Label htmlFor="entries">Total entries</Label>
+        <Label htmlFor="completed">Drafts completed</Label>
         <Input
-          id="entries"
+          id="completed"
           type="number"
-          min={1}
-          max={10000}
-          value={totalEntries}
-          onChange={(e) => setTotalEntries(Number(e.target.value) || 0)}
+          min={0}
+          max={150}
+          value={completed}
+          onChange={(e) => setCompleted(Math.max(0, Number(e.target.value) || 0))}
         />
       </div>
 
       <div className="space-y-2">
-        <Label>Projected fill date</Label>
+        <Label htmlFor="remaining">Drafts remaining</Label>
+        <Input
+          id="remaining"
+          type="number"
+          min={1}
+          max={150}
+          value={remaining}
+          onChange={(e) => setRemaining(Math.max(0, Number(e.target.value) || 0))}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Projected completion date</Label>
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -76,7 +100,7 @@ export function SchedulerForm({ onSubmit }: Props) {
               mode="single"
               selected={endDate}
               onSelect={setEndDate}
-              defaultMonth={endDate ?? maxDate}
+              defaultMonth={endDate ?? defaultDate}
               disabled={(d) => d < minDate || d > maxDate}
               initialFocus
               className={cn("p-3 pointer-events-auto")}
@@ -84,13 +108,20 @@ export function SchedulerForm({ onSubmit }: Props) {
           </PopoverContent>
         </Popover>
         <p className="text-xs text-muted-foreground">
-          {format(minDate, "MMM d")} – {format(maxDate, "MMM d, yyyy")}
+          {format(minDate, "MMM d")} – {format(maxDate, "MMM d, yyyy")} (PT)
         </p>
       </div>
 
-      <Button type="submit" disabled={!canSubmit}>
-        Generate schedule
-      </Button>
+      <div className="space-y-2">
+        <Button type="submit" disabled={!canSubmit} className="w-full">
+          Generate schedule
+        </Button>
+        {!totalValid && total > 150 && (
+          <p className="text-xs text-destructive">
+            Completed + remaining can't exceed 150.
+          </p>
+        )}
+      </div>
     </form>
   );
 }

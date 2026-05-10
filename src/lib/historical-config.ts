@@ -15,15 +15,10 @@ export const CURRENT_YEAR = new Date().getFullYear();
 export const EARLIEST_HISTORICAL_FILL_MMDD = "08-15";
 
 /**
- * NFL Week 1 kickoff per year. Used as the date picker's max.
- * Add each new year as the schedule is announced.
+ * Latest selectable projected completion date (year-agnostic MM-DD).
+ * The date picker uses this — projected onto the current year — as its max.
  */
-export const NFL_SEASON_OPENERS: Record<number, string> = {
-  2024: "2024-09-05",
-  2025: "2025-09-04",
-  2026: "2026-09-10",
-  2027: "2027-09-09",
-};
+export const LATEST_COMPLETION_MMDD = "09-09";
 
 /**
  * BBM officially opens the Monday after the NFL Draft. The NFL Draft is
@@ -73,11 +68,39 @@ export function getCurrentBbmOpenDate(year = CURRENT_YEAR): Date {
   return new Date(`${iso}T00:00:00`);
 }
 
-export function getCurrentNflOpenerDate(year = CURRENT_YEAR): Date {
-  const iso = NFL_SEASON_OPENERS[year] ?? `${year}-09-07`;
-  return new Date(`${iso}T00:00:00`);
+export function getLatestCompletionDate(year = CURRENT_YEAR): Date {
+  return new Date(`${year}-${LATEST_COMPLETION_MMDD}T00:00:00`);
 }
 
 export function getEarliestSelectableEndDate(year = CURRENT_YEAR): Date {
   return new Date(`${year}-${EARLIEST_HISTORICAL_FILL_MMDD}T00:00:00`);
 }
+
+/**
+ * Today's date in America/Los_Angeles (Pacific) as a local Date at midnight.
+ */
+export function getTodayInPacific(): Date {
+  const s = new Date().toLocaleString("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const [m, d, y] = s.split(/[\/,\s]/).filter(Boolean);
+  return new Date(`${y}-${m}-${d}T00:00:00`);
+}
+
+/**
+ * Day-of-week relative weights (Sun..Sat). Mirrors the observed pattern that
+ * drafters are more active on Sundays and weekday evenings, less on Fridays.
+ * Used by the scheduler so daily counts don't always pile onto Monday.
+ */
+export const DAY_OF_WEEK_WEIGHTS: number[] = [
+  1.25, // Sun
+  1.05, // Mon
+  0.95, // Tue
+  0.95, // Wed
+  1.0,  // Thu
+  0.85, // Fri
+  0.95, // Sat
+];

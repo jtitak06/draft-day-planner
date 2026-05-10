@@ -28,6 +28,8 @@ export type ComputeScheduleInput = {
   totalEntries: number;
   /** Historical weekly weights (will be resampled to fit the window). */
   weights: number[];
+  /** Optional day-of-week weights (Sun..Sat). Defaults to flat. */
+  dayOfWeekWeights?: number[];
 };
 
 /**
@@ -94,7 +96,16 @@ export function computeSchedule(input: ComputeScheduleInput): Schedule {
       7,
       differenceInCalendarDays(end, weekStart) + 1,
     );
-    const dayWeights = new Array(daysInBucket).fill(1);
+    const dowWeights = input.dayOfWeekWeights ?? new Array(7).fill(1);
+    const dayWeights: number[] = [];
+    for (let d = 0; d < daysInBucket; d++) {
+      const date = addDays(weekStart, d);
+      const dow = date.getDay();
+      // Tiny deterministic jitter so leftovers rotate across weeks instead
+      // of always landing on the same weekday.
+      const jitter = 1 + 0.013 * (((w * 7 + d) * 31) % 7);
+      dayWeights.push(dowWeights[dow] * jitter);
+    }
     const perDay = largestRemainderAllocate(perWeek[w], dayWeights);
     for (let d = 0; d < daysInBucket; d++) {
       days.push({
