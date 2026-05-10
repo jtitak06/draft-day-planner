@@ -1,4 +1,8 @@
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
+import {
+  FINALIST_MONTH_BREAKDOWN,
+  FINALIST_TOTAL,
+} from "./historical-config";
 
 export type Severity = "optimal" | "reasonable" | "suboptimal";
 
@@ -12,6 +16,8 @@ export type WindowAnalysis = {
   draftsPerDay: number;
   headline: string;
   details: string[];
+  historyBullets: string[]; // BBM V monthly breakdown
+  suggestionBullets: string[]; // dynamic suggestions vs user window
 };
 
 function cdf(weights: number[], t: number): number {
@@ -107,6 +113,55 @@ export function analyzeWindow(args: {
       "Not an optimal strategy — your window misses most of the historical finalist draft window. The schedule below still produces the best output for your chosen criteria.";
   }
 
+  // Real BBM V monthly breakdown bullets
+  const historyBullets = FINALIST_MONTH_BREAKDOWN.map((m) => {
+    const pct = (m.pct * 100).toFixed(1);
+    return `${m.month}: ${pct}% of finalist teams (${m.count} of ${FINALIST_TOTAL})`;
+  });
+
+  // Dynamic suggestions based on user window vs BBM V months
+  const suggestionBullets: string[] = [];
+  const winStartMonth = windowStart.getMonth() + 1; // 1-12
+  const winEndMonth = windowEnd.getMonth() + 1;
+  const winEndDay = windowEnd.getDate();
+  const winStartDay = windowStart.getDate();
+
+  const pctOf = (months: number[]) =>
+    FINALIST_MONTH_BREAKDOWN.filter((m) => months.includes(m.monthIndex)).reduce(
+      (a, b) => a + b.pct,
+      0,
+    );
+
+  if (winEndMonth < 8 || (winEndMonth === 8 && winEndDay < 15)) {
+    suggestionBullets.push(
+      `You're finishing before mid-August. ~${(pctOf([8]) * 100).toFixed(0)}% of BBM V finalists were drafted in August — extending your window into late August would put you in the densest part of the finalist draft curve.`,
+    );
+  }
+  if (winStartMonth > 6 || (winStartMonth === 6 && winStartDay > 15)) {
+    suggestionBullets.push(
+      `You're starting mid-June or later. ~${(pctOf([4, 5, 6]) * 100).toFixed(0)}% of BBM V finalists were drafted before then — starting earlier captures the soft-field, pre-camp portion of the cycle.`,
+    );
+  }
+  if (
+    winEndMonth === 8 &&
+    winEndDay >= 20 &&
+    (winStartMonth < 8 || (winStartMonth === 8 && winStartDay <= 15))
+  ) {
+    suggestionBullets.push(
+      "Your window covers the late-August peak — last year ~35% of finalist teams filled in the final 10 days of August alone.",
+    );
+  }
+  if (winEndMonth >= 9) {
+    suggestionBullets.push(
+      "No BBM V finalist team was drafted in September. Drafting after Aug 31 historically puts you outside the finalist window entirely.",
+    );
+  }
+  if (suggestionBullets.length === 0) {
+    suggestionBullets.push(
+      "Your window covers the bulk of the BBM V finalist draft distribution — no major gaps to flag.",
+    );
+  }
+
   return {
     severity,
     windowFraction,
@@ -117,6 +172,8 @@ export function analyzeWindow(args: {
     draftsPerDay,
     headline,
     details,
+    historyBullets,
+    suggestionBullets,
   };
 }
 
