@@ -1,80 +1,52 @@
+## Goal
 
-# Best Ball Mania Draft Scheduler — v1 Framework
+Fix the misleading "12% after Sep 7" stat by replacing the placeholder historical distribution with **real BBM V (2024) finalist data** from your Google Sheet, and add a clear per-month breakdown with insight bullets under the analysis.
 
-A free single-page tool that takes a user's total entry count and projected tournament-fill date, then outputs a calendar of when to draft each entry, weighted by the historical distribution of when prior BBM finalist teams were drafted.
+## What the real data says (BBM V — 539 finalist drafts)
 
-## User flow
+| Month | Finalist drafts | % of finalists |
+|---|---:|---:|
+| April (open week, 4/29+) | 12 | 2.2% |
+| May | 86 | 16.0% |
+| June | 77 | 14.3% |
+| July | 95 | 17.6% |
+| August | 269 | 49.9% |
+| September | 0 | 0.0% |
 
-1. User lands on `/` and sees the scheduler.
-2. App auto-detects current BBM cycle (start date = Monday after NFL Draft).
-3. User enters:
-   - Total number of entries they plan to draft
-   - Projected tournament fill date (constrained: min = earliest historical BBM fill date, max = NFL Week 1 kickoff date)
-4. App generates a draft schedule — number of drafts per day/week — weighted by historical finalist draft-date distribution.
-5. User sees results as a calendar view + summary table, with CSV export.
+Earliest finalist fill: 2024‑06‑02. Latest finalist fill: 2024‑08‑31. **No finalist team was drafted in September.**
 
-## Pages / routes
+## Changes
 
-- `src/routes/index.tsx` — the entire tool (form + calendar + table). No other routes in v1.
+### 1. Replace placeholder distribution with real BBM V data
+**File:** `src/lib/historical-config.ts`
+- Replace `FINALIST_DRAFT_DISTRIBUTION` (the synthetic 19-week curve) with weights derived from the real BBM V daily counts. Will store as a daily-resolution array indexed from BBM open day, so the analysis CDF is accurate to the day rather than smeared across week buckets.
+- Add a new export `FINALIST_MONTH_BREAKDOWN` containing the table above (label, count, pct), driven directly from the sheet data.
+- Update `LATEST_COMPLETION_MMDD` from `09-09` → `08-31` (real latest finalist fill). The date picker will cap there.
+- Update `EARLIEST_HISTORICAL_FILL_MMDD` from `08-15` → `06-02` (real earliest finalist fill).
 
-## Components (`src/components/scheduler/`)
+### 2. Update analysis to use daily weights
+**File:** `src/lib/analysis.ts`
+- `cdf()` already works on any-length weight array — no logic change needed, just feed daily weights instead of weekly.
+- The Sep-7 / "12% after" claims will now correctly show **0%** finalists after Aug 31.
 
-- `SchedulerForm.tsx` — entry count input, fill-date picker (with min/max enforced), submit
-- `ScheduleCalendar.tsx` — month grid showing draft counts per day (uses shadcn Calendar styled as heatmap)
-- `ScheduleTable.tsx` — week-by-week breakdown: dates, # drafts, % of total, cumulative
-- `BbmStatusBanner.tsx` — shows live BBM status pulled from Underdog (open/closed, fills so far)
-- `ExportCsvButton.tsx`
+### 3. Add finalist-month breakdown bullets under the analysis
+**File:** `src/components/scheduler/ScheduleAnalysis.tsx`
+- Below the existing analysis card, render a new section: **"BBM V finalist draft history (2024)"**
+- One bullet per month with count + percentage, e.g.:
+  - "August: 49.9% of finalist teams (269 of 539) — by far the dominant draft window"
+  - "September: 0% — no BBM V finalist team was drafted after Aug 31"
+- Plus 2–3 **suggestion bullets** that compare the user's chosen window against this real history. Examples that will be generated dynamically based on `windowStart`/`windowEnd`:
+  - If user ends before Aug 1: "You're skipping August, where ~50% of last year's finalists were drafted. Consider extending into mid/late August."
+  - If user starts after Jul 1: "You're skipping May–June (~30% of last year's finalists), so you'll miss early-cycle soft fields."
+  - If user spans Aug 15–31: "You're targeting peak finalist-draft season — last year ~35% of finalists filled in this window."
 
-## Data layer
+### 4. Pull data once, embed as a constant
+The sheet contents will be embedded as a static constant in `historical-config.ts` (not fetched at runtime). One BBM cycle of data is small (~6 numbers per month + ~125 daily weights). If you want to refresh from the sheet later, we can add a small build script — out of scope for this change.
 
-### Live Underdog data (server-side only)
+## Out of scope
+- Multi-year support (BBM I–IV). Only BBM V data is in the sheet you shared.
+- Live re-fetch from Google Sheets.
+- Charts (you asked for bullet points, not visuals).
 
-Server functions in `src/lib/underdog.functions.ts` (helpers in `underdog.server.ts`):
-- `getCurrentBbmTournament()` — fetches current Best Ball Mania tournament metadata (start date, current entrants, tournament id) from Underdog's public draft-pool / tournament endpoints.
-- Cached for ~5 minutes via response headers.
-- Endpoints discovered from the reference tool's network traffic (e.g. `https://api.underdogfantasy.com/v1/...`). Wrapped with `try/catch` returning a typed `{ data, error }` shape so UI degrades gracefully if Underdog changes their API.
-
-### Static historical config
-
-`src/lib/historical-config.ts` — hand-coded constants the user can later tweak:
-- `BBM_HISTORICAL_FILL_DATES` — earliest fill date across past BBMs → used as min for the date picker
-- `NFL_SEASON_OPENERS` — Week 1 kickoff per year → used as max for the date picker
-- `FINALIST_DRAFT_DISTRIBUTION` — weekly weights (0..1) representing % of finalist teams drafted each week of the cycle, normalized to sum to 1
-
-### Schedule computation
-
-`src/lib/schedule.ts`:
-- `computeSchedule({ startDate, endDate, totalEntries, weights })`
-  1. Split [startDate, endDate] into N weekly buckets
-  2. Map historical weights onto buckets (rescale if window is shorter/longer than historical reference window)
-  3. Allocate entries per bucket = `round(totalEntries * normalizedWeight)`, fix rounding drift on the largest bucket
-  4. Within each weekly bucket, distribute drafts across days (default: even, with slight evening/weekend bias — toggleable later)
-  5. Return `{ days: [{ date, count }], weeks: [{ weekStart, count, pct }] }`
-
-Pure function, fully unit-testable, no network calls.
-
-## Constraints on the date picker
-
-- `min = max(today, BBM_OPEN_DATE)` actually no — earliest selectable end date is `min(BBM_HISTORICAL_FILL_DATES)` (earliest day BBM has ever filled in any prior year, projected onto current cycle)
-- `max = NFL Week 1 kickoff for current year`
-- Disabled outside this range using shadcn Calendar's `disabled` prop
-
-## Out of scope for v1 (noted for later)
-
-- Saving schedules per user (no auth, no DB)
-- Multiple strategies (even / front-loaded / back-loaded)
-- Auto-syncing with the user's actual Underdog draft history
-- Notifications / reminders
-
-## Technical notes
-
-- Stack: TanStack Start (existing), TypeScript strict, Tailwind v4 + shadcn (already installed)
-- New deps: `date-fns` (likely already pulled by shadcn calendar), none else required
-- Underdog calls run only in `createServerFn` handlers — never from the browser — to avoid CORS and to allow caching
-- All colors via existing semantic tokens in `src/styles.css`; no hard-coded hex
-- SEO: route `head()` with title "Best Ball Mania Draft Scheduler" and meta description
-
-## Open items I'll need from you during build
-
-- Confirmation of the historical finalist weekly weights (I'll seed reasonable defaults from public BBM finals data; you can edit `historical-config.ts`)
-- Confirmation that scraping Underdog's public endpoints server-side is acceptable for your use case
+## Open question
+Your sheet uses `draft_filled_time` (when the *draft* filled). I'm using that as "when the finalist team was drafted." If you'd rather measure by `draft_completed_time` (when the last pick was made) the numbers shift slightly but the shape is the same — I'll stick with `draft_filled_time` unless you say otherwise.
