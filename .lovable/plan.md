@@ -1,52 +1,69 @@
 ## Goal
 
-Fix the misleading "12% after Sep 7" stat by replacing the placeholder historical distribution with **real BBM V (2024) finalist data** from your Google Sheet, and add a clear per-month breakdown with insight bullets under the analysis.
+Replace the single-year (BBM V) placeholder-ish data with all 4 years of real finalist draft data (BBM II–V) embedded in the project. Drive the scheduler off the **4-year average distribution**, and show a **combined table-style bullet list** comparing all 4 years side-by-side in the analysis section.
 
-## What the real data says (BBM V — 539 finalist drafts)
+## Confirmed inputs
 
-| Month | Finalist drafts | % of finalists |
-|---|---:|---:|
-| April (open week, 4/29+) | 12 | 2.2% |
-| May | 86 | 16.0% |
-| June | 77 | 14.3% |
-| July | 95 | 17.6% |
-| August | 269 | 49.9% |
-| September | 0 | 0.0% |
+- Source sheet: 4 tabs — `BBM II`, `BBM III`, `BBM IV`, `BBM V` (2021–2024).
+- Same schema as before (`draft_filled_time` is the "finalist drafted on" field).
+- Sheet is publicly readable, so I can pull each tab via the CSV export endpoint without needing a connector.
+- One sheet with 4 tabs is fine — no need to split into 4 docs.
 
-Earliest finalist fill: 2024‑06‑02. Latest finalist fill: 2024‑08‑31. **No finalist team was drafted in September.**
+## Architecture: embed, don't fetch live
+
+I'll do the data work once (during implementation), aggregate it, and commit static TypeScript constants. The app makes zero network calls for this data.
+
+```
+src/data/
+  raw/
+    bbm-ii.csv          ← committed for auditability, not imported by app
+    bbm-iii.csv
+    bbm-iv.csv
+    bbm-v.csv
+  bbm-finalist-history.ts ← the only file the app imports
+```
+
+`bbm-finalist-history.ts` exports, per-year and combined:
+- daily counts indexed from each year's BBM open day through that year's last finalist fill
+- monthly breakdown (April–September): count + pct
+- earliest finalist fill date and latest finalist fill date
+- a **combined 4-year-average daily distribution** normalized onto a common month-of-year axis (so years with different open dates align), used by the scheduler
+- a combined monthly breakdown averaging the 4 years
 
 ## Changes
 
-### 1. Replace placeholder distribution with real BBM V data
-**File:** `src/lib/historical-config.ts`
-- Replace `FINALIST_DRAFT_DISTRIBUTION` (the synthetic 19-week curve) with weights derived from the real BBM V daily counts. Will store as a daily-resolution array indexed from BBM open day, so the analysis CDF is accurate to the day rather than smeared across week buckets.
-- Add a new export `FINALIST_MONTH_BREAKDOWN` containing the table above (label, count, pct), driven directly from the sheet data.
-- Update `LATEST_COMPLETION_MMDD` from `09-09` → `08-31` (real latest finalist fill). The date picker will cap there.
-- Update `EARLIEST_HISTORICAL_FILL_MMDD` from `08-15` → `06-02` (real earliest finalist fill).
+### 1. Pull and embed the data
+- Fetch each tab as CSV (already verified accessible).
+- Save raw CSVs to `src/data/raw/`.
+- Build `src/data/bbm-finalist-history.ts` with the aggregates above. All numbers derived from the CSVs — no hand-tuning.
 
-### 2. Update analysis to use daily weights
-**File:** `src/lib/analysis.ts`
-- `cdf()` already works on any-length weight array — no logic change needed, just feed daily weights instead of weekly.
-- The Sep-7 / "12% after" claims will now correctly show **0%** finalists after Aug 31.
+### 2. Rewrite `src/lib/historical-config.ts`
+- Re-export from `bbm-finalist-history.ts` instead of holding inline arrays.
+- `FINALIST_DRAFT_DISTRIBUTION` becomes the **4-year average** daily weights.
+- `EARLIEST_HISTORICAL_FILL_MMDD` becomes the earliest finalist fill across all 4 years.
+- `LATEST_COMPLETION_MMDD` becomes the latest finalist fill across all 4 years.
+- `FINALIST_MONTH_BREAKDOWN` becomes the 4-year averaged monthly pcts.
+- Add new export `FINALIST_HISTORY_BY_YEAR: { year, label, total, monthly: MonthBreakdownEntry[], earliest, latest }[]` for the UI.
 
-### 3. Add finalist-month breakdown bullets under the analysis
-**File:** `src/components/scheduler/ScheduleAnalysis.tsx`
-- Below the existing analysis card, render a new section: **"BBM V finalist draft history (2024)"**
-- One bullet per month with count + percentage, e.g.:
-  - "August: 49.9% of finalist teams (269 of 539) — by far the dominant draft window"
-  - "September: 0% — no BBM V finalist team was drafted after Aug 31"
-- Plus 2–3 **suggestion bullets** that compare the user's chosen window against this real history. Examples that will be generated dynamically based on `windowStart`/`windowEnd`:
-  - If user ends before Aug 1: "You're skipping August, where ~50% of last year's finalists were drafted. Consider extending into mid/late August."
-  - If user starts after Jul 1: "You're skipping May–June (~30% of last year's finalists), so you'll miss early-cycle soft fields."
-  - If user spans Aug 15–31: "You're targeting peak finalist-draft season — last year ~35% of finalists filled in this window."
+### 3. Update `src/lib/analysis.ts`
+- `historyBullets` becomes a **combined table-style list**, one bullet per month, comparing all 4 years + average. Format:
+  - `August: 47% / 50% / 49% / 50% — avg 49% (BBM II / III / IV / V)`
+- `suggestionBullets` keeps the same dynamic logic but cites the 4-year average pct (e.g., "~30% of finalists across BBM II–V were drafted before June 15").
+- `details` (the top window-fit bullets) now reference "BBM II–V" instead of "BBM V".
 
-### 4. Pull data once, embed as a constant
-The sheet contents will be embedded as a static constant in `historical-config.ts` (not fetched at runtime). One BBM cycle of data is small (~6 numbers per month + ~125 daily weights). If you want to refresh from the sheet later, we can add a small build script — out of scope for this change.
+### 4. Update `src/components/scheduler/ScheduleAnalysis.tsx`
+- Section title: **"Finalist draft history (BBM II–V, 2021–2024)"**
+- Subtitle updates to: `Combined across {total} finalist drafts over 4 BBM seasons, by month of draft_filled_time.`
+- Bullet list renders the new combined-row format. No layout change beyond text.
 
 ## Out of scope
-- Multi-year support (BBM I–IV). Only BBM V data is in the sheet you shared.
-- Live re-fetch from Google Sheets.
-- Charts (you asked for bullet points, not visuals).
 
-## Open question
-Your sheet uses `draft_filled_time` (when the *draft* filled). I'm using that as "when the finalist team was drafted." If you'd rather measure by `draft_completed_time` (when the last pick was made) the numbers shift slightly but the shape is the same — I'll stick with `draft_filled_time` unless you say otherwise.
+- Charts / per-year toggles in the UI (you chose the single combined bullet list).
+- Re-fetching the sheet at runtime (everything is embedded).
+- Backfilling BBM I (not in your sheet).
+
+## Technical notes
+
+- The 4 years have different open dates (NFL Draft moves yearly). The combined daily curve aligns on **calendar month-day** (e.g., July 15 in BBM II maps to July 15 in BBM V), not on "day-since-open." Date pickers and the scheduler already operate in calendar dates, so this matches.
+- Earliest/latest pickers will widen vs today's bounds (currently `06-02` → `08-31` from BBM V only). Expect both ends to shift outward once older years are included.
+- The pre-aggregation runs once during implementation via a small Node/Python script in `/tmp/`; only the generated `.ts` file ships in the app.
