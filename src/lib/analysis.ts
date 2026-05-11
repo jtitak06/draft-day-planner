@@ -1,5 +1,6 @@
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import {
+  FINALIST_HISTORY,
   FINALIST_MONTH_BREAKDOWN,
   FINALIST_TOTAL,
 } from "./historical-config";
@@ -20,7 +21,7 @@ export type WindowAnalysis = {
   suggestionBullets: string[]; // dynamic suggestions vs user window
 };
 
-function cdf(weights: number[], t: number): number {
+function cdf(weights: readonly number[], t: number): number {
   // t in [0,1] across the weights array; returns cumulative fraction.
   if (weights.length === 0) return 0;
   const total = weights.reduce((a, b) => a + b, 0);
@@ -41,7 +42,7 @@ export function analyzeWindow(args: {
   cycleEnd: Date;
   windowStart: Date;
   windowEnd: Date;
-  weights: number[];
+  weights: readonly number[];
   remaining: number;
   completed: number;
 }): WindowAnalysis {
@@ -113,13 +114,18 @@ export function analyzeWindow(args: {
       "Not an optimal strategy — your window misses most of the historical finalist draft window. The schedule below still produces the best output for your chosen criteria.";
   }
 
-  // Real BBM V monthly breakdown bullets
-  const historyBullets = FINALIST_MONTH_BREAKDOWN.map((m) => {
-    const pct = (m.pct * 100).toFixed(1);
-    return `${m.month}: ${pct}% of finalist teams (${m.count} of ${FINALIST_TOTAL})`;
+  // Combined per-month bullets: one row per month with all 4 years + 4-year avg.
+  // Format: "August: 34% / 41% / 38% / 50% — avg 41% (BBM II / III / IV / V)"
+  const historyBullets = FINALIST_MONTH_BREAKDOWN.map((avg) => {
+    const perYearPcts = FINALIST_HISTORY.map((y) => {
+      const entry = y.monthly.find((e) => e.monthIndex === avg.monthIndex);
+      return entry ? Math.round(entry.pct * 100) : 0;
+    });
+    const avgPct = Math.round(avg.pct * 100);
+    return `${avg.month}: ${perYearPcts.join("% / ")}% — avg ${avgPct}% (BBM II / III / IV / V)`;
   });
 
-  // Dynamic suggestions based on user window vs BBM V months
+  // Dynamic suggestions based on user window vs the 4-year average distribution.
   const suggestionBullets: string[] = [];
   const winStartMonth = windowStart.getMonth() + 1; // 1-12
   const winEndMonth = windowEnd.getMonth() + 1;
@@ -134,12 +140,12 @@ export function analyzeWindow(args: {
 
   if (winEndMonth < 8 || (winEndMonth === 8 && winEndDay < 15)) {
     suggestionBullets.push(
-      `You're finishing before mid-August. ~${(pctOf([8]) * 100).toFixed(0)}% of BBM V finalists were drafted in August — extending your window into late August would put you in the densest part of the finalist draft curve.`,
+      `You're finishing before mid-August. ~${(pctOf([8]) * 100).toFixed(0)}% of BBM II–V finalists (4-year avg) were drafted in August — extending your window into late August would put you in the densest part of the finalist draft curve.`,
     );
   }
   if (winStartMonth > 6 || (winStartMonth === 6 && winStartDay > 15)) {
     suggestionBullets.push(
-      `You're starting mid-June or later. ~${(pctOf([4, 5, 6]) * 100).toFixed(0)}% of BBM V finalists were drafted before then — starting earlier captures the soft-field, pre-camp portion of the cycle.`,
+      `You're starting mid-June or later. ~${(pctOf([4, 5, 6]) * 100).toFixed(0)}% of BBM II–V finalists (4-year avg) were drafted before then — starting earlier captures the soft-field, pre-camp portion of the cycle.`,
     );
   }
   if (
@@ -148,17 +154,17 @@ export function analyzeWindow(args: {
     (winStartMonth < 8 || (winStartMonth === 8 && winStartDay <= 15))
   ) {
     suggestionBullets.push(
-      "Your window covers the late-August peak — last year ~35% of finalist teams filled in the final 10 days of August alone.",
+      "Your window covers the late-August peak — historically the densest stretch of the finalist draft window across BBM II–V.",
     );
   }
   if (winEndMonth >= 9) {
     suggestionBullets.push(
-      "No BBM V finalist team was drafted in September. Drafting after Aug 31 historically puts you outside the finalist window entirely.",
+      `Your window extends into September. Across BBM II–V, only ~${(pctOf([9]) * 100).toFixed(0)}% of finalist teams were drafted in September — and 0% in BBM V (2024).`,
     );
   }
   if (suggestionBullets.length === 0) {
     suggestionBullets.push(
-      "Your window covers the bulk of the BBM V finalist draft distribution — no major gaps to flag.",
+      "Your window covers the bulk of the BBM II–V finalist draft distribution — no major gaps to flag.",
     );
   }
 

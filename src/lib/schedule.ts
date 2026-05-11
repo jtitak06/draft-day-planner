@@ -27,9 +27,9 @@ export type ComputeScheduleInput = {
   endDate: Date;
   totalEntries: number;
   /** Historical weekly weights (will be resampled to fit the window). */
-  weights: number[];
+  weights: readonly number[];
   /** Optional day-of-week weights (Sun..Sat). Defaults to flat. */
-  dayOfWeekWeights?: number[];
+  dayOfWeekWeights?: readonly number[];
 };
 
 /**
@@ -37,7 +37,7 @@ export type ComputeScheduleInput = {
  * This lets us stretch/squeeze the historical distribution to match whatever
  * window the user selects.
  */
-function resampleWeights(weights: number[], targetLen: number): number[] {
+function resampleWeights(weights: readonly number[], targetLen: number): number[] {
   if (targetLen <= 0) return [];
   if (weights.length === 0) return new Array(targetLen).fill(1);
   if (targetLen === 1) return [weights.reduce((a, b) => a + b, 0)];
@@ -59,7 +59,7 @@ function resampleWeights(weights: number[], targetLen: number): number[] {
  */
 function largestRemainderAllocate(
   total: number,
-  weights: number[],
+  weights: readonly number[],
 ): number[] {
   const sum = weights.reduce((a, b) => a + b, 0);
   if (sum <= 0 || total <= 0) return new Array(weights.length).fill(0);

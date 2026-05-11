@@ -1,24 +1,30 @@
 /**
  * Historical reference data for Best Ball Mania scheduling.
  *
- * Edit these constants to refine the scheduler. All dates are stored as
- * MM-DD strings (year-agnostic) so we can map them onto the current cycle.
+ * Data is derived from 4 years of real BBM finalist drafts (II–V, 2021–2024)
+ * and lives in `src/data/bbm-finalist-history.ts`. This file is a thin
+ * adapter that re-exports those constants under the names the scheduler /
+ * analysis / form components already use.
  */
+
+import {
+  EARLIEST_FINALIST_MMDD,
+  FINALIST_DAILY_DISTRIBUTION,
+  FINALIST_HISTORY_BY_YEAR,
+  FINALIST_MONTH_BREAKDOWN_AVG,
+  FINALIST_TOTAL_ALL_YEARS,
+  LATEST_FINALIST_MMDD,
+  type MonthBreakdownEntry as MonthBreakdownEntryT,
+  type YearHistory as YearHistoryT,
+} from "@/data/bbm-finalist-history";
 
 export const CURRENT_YEAR = new Date().getFullYear();
 
-/**
- * Earliest date a BBM finalist team was drafted in BBM V (2024).
- * The date picker uses this — projected onto the current year — as its min.
- */
-export const EARLIEST_HISTORICAL_FILL_MMDD = "06-02";
+/** Earliest finalist fill date across BBM II–V (used as date-picker min). */
+export const EARLIEST_HISTORICAL_FILL_MMDD = EARLIEST_FINALIST_MMDD;
 
-/**
- * Latest date a BBM V (2024) finalist team was drafted. No finalist team
- * was drafted in September. The date picker uses this — projected onto the
- * current year — as its max.
- */
-export const LATEST_COMPLETION_MMDD = "08-31";
+/** Latest finalist fill date across BBM II–V (used as date-picker max). */
+export const LATEST_COMPLETION_MMDD = LATEST_FINALIST_MMDD;
 
 /**
  * BBM officially opens the Monday after the NFL Draft. The NFL Draft is
@@ -32,41 +38,24 @@ export const BBM_OPEN_DATES: Record<number, string> = {
 };
 
 /**
- * Real BBM V (2024) finalist draft distribution — daily counts of finalist
- * teams by `draft_filled_time`, indexed from the BBM open day (2024-04-29)
- * through 2024-08-31 (125 days). Source: 539 finalist drafts.
- * No finalist team was drafted in September.
+ * 4-year-averaged daily finalist distribution (BBM II–V), indexed across
+ * the canonical 04-29 .. 09-09 month-day axis. Sums to 1.
  */
-export const FINALIST_DRAFT_DISTRIBUTION: number[] = [
-  7, 5, 6, 3, 5, 6, 4, 1, 6, 6, 2, 0, 1, 2, 2, 0, 3, 5, 1, 1, 3, 3, 3, 2, 3,
-  3, 0, 2, 4, 3, 1, 2, 3, 2, 6, 4, 0, 4, 4, 0, 3, 3, 0, 3, 1, 4, 2, 2, 2, 3,
-  4, 3, 2, 1, 2, 2, 0, 3, 2, 6, 4, 4, 1, 6, 8, 2, 3, 4, 2, 2, 5, 2, 1, 5, 1,
-  4, 3, 2, 1, 3, 2, 0, 0, 3, 4, 3, 1, 6, 4, 3, 4, 4, 2, 5, 3, 3, 1, 7, 3, 5,
-  6, 3, 8, 5, 12, 10, 11, 4, 14, 6, 7, 6, 8, 8, 9, 12, 10, 10, 15, 10, 10,
-  14, 20, 15, 14,
-];
+export const FINALIST_DRAFT_DISTRIBUTION: readonly number[] =
+  FINALIST_DAILY_DISTRIBUTION;
 
-/**
- * BBM V (2024) finalist teams by month, derived from the same source.
- * Total finalists: 539. April covers the open week only (4/29–4/30).
- */
-export type MonthBreakdownEntry = {
-  month: string; // e.g. "August"
-  monthIndex: number; // 1-12
-  count: number;
-  pct: number; // 0..1
-};
+export type MonthBreakdownEntry = MonthBreakdownEntryT;
+export type YearHistory = YearHistoryT;
 
-export const FINALIST_TOTAL = 539;
+/** Total finalist drafts across all 4 years (BBM II–V). */
+export const FINALIST_TOTAL = FINALIST_TOTAL_ALL_YEARS;
 
-export const FINALIST_MONTH_BREAKDOWN: MonthBreakdownEntry[] = [
-  { month: "April (open week)", monthIndex: 4, count: 12, pct: 12 / 539 },
-  { month: "May", monthIndex: 5, count: 86, pct: 86 / 539 },
-  { month: "June", monthIndex: 6, count: 77, pct: 77 / 539 },
-  { month: "July", monthIndex: 7, count: 95, pct: 95 / 539 },
-  { month: "August", monthIndex: 8, count: 269, pct: 269 / 539 },
-  { month: "September", monthIndex: 9, count: 0, pct: 0 },
-];
+/** 4-year-averaged monthly breakdown. `count` is the average per-year count. */
+export const FINALIST_MONTH_BREAKDOWN: readonly MonthBreakdownEntry[] =
+  FINALIST_MONTH_BREAKDOWN_AVG;
+
+/** Per-year history (BBM II, III, IV, V). */
+export const FINALIST_HISTORY = FINALIST_HISTORY_BY_YEAR;
 
 export function getCurrentBbmOpenDate(year = CURRENT_YEAR): Date {
   const iso = BBM_OPEN_DATES[year] ?? `${year}-04-29`;
