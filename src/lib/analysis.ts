@@ -20,7 +20,7 @@ export type WindowAnalysis = {
   suggestionBullets: string[]; // dynamic suggestions vs user window
 };
 
-function cdf(weights: number[], t: number): number {
+function cdf(weights: readonly number[], t: number): number {
   // t in [0,1] across the weights array; returns cumulative fraction.
   if (weights.length === 0) return 0;
   const total = weights.reduce((a, b) => a + b, 0);
@@ -41,7 +41,7 @@ export function analyzeWindow(args: {
   cycleEnd: Date;
   windowStart: Date;
   windowEnd: Date;
-  weights: number[];
+  weights: readonly number[];
   remaining: number;
   completed: number;
 }): WindowAnalysis {
