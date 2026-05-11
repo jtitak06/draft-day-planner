@@ -43,10 +43,12 @@ export function ScheduleAnalysis({ analysis }: Props) {
 
     <div className="rounded-lg border bg-card p-5">
       <p className="font-medium text-foreground">
-        BBM V (2024) finalist draft history
+        Finalist draft history (BBM II–V, 2021–2024)
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Based on 539 finalist teams, by month of <code>draft_filled_time</code>.
+        Combined across 1,609 finalist drafts over 4 BBM seasons. BBM IV–V use{" "}
+        <code>draft_filled_time</code>; BBM II–III use <code>draft_time</code>{" "}
+        (fill time isn't available in those years).
       </p>
       <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
         {analysis.historyBullets.map((b, i) => (
