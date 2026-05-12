@@ -1,69 +1,57 @@
-## Goal
+# Monetize the BBM Scheduler
 
-Replace the single-year (BBM V) placeholder-ish data with all 4 years of real finalist draft data (BBM II–V) embedded in the project. Drive the scheduler off the **4-year average distribution**, and show a **combined table-style bullet list** comparing all 4 years side-by-side in the analysis section.
+Turn the app into a paid tool: free visitors can use the form and see a blurred preview of results; a one-time $25 payment unlocks full results through December 31 of the current year. Accounts can only be created after payment.
 
-## Confirmed inputs
+## User Flow
 
-- Source sheet: 4 tabs — `BBM II`, `BBM III`, `BBM IV`, `BBM V` (2021–2024).
-- Same schema as before (`draft_filled_time` is the "finalist drafted on" field).
-- Sheet is publicly readable, so I can pull each tab via the CSV export endpoint without needing a connector.
-- One sheet with 4 tabs is fine — no need to split into 4 docs.
+1. Visitor lands on `/` — form is fully usable, "Sign in" button in top-right.
+2. They click **Generate schedule** → results render, but bullet lists and June–September calendar months are blurred with a CTA overlay: *"For the cost of 1 best ball entry, you can have a draft-window-optimized portfolio of 150 teams. Unlock full results — $25."*
+3. CTA → Stripe Checkout ($25, one-time). Email is collected by Stripe.
+4. On payment success → user lands on `/welcome?session_id=...` → sets a password (or links Google) → account created, marked paid through Dec 31.
+5. Returning paid users sign in (email/password or Google) and see everything unblurred until their access expires.
 
-## Architecture: embed, don't fetch live
+## What Gets Built
 
-I'll do the data work once (during implementation), aggregate it, and commit static TypeScript constants. The app makes zero network calls for this data.
+### 1. Backend (Lovable Cloud)
+- Enable Lovable Cloud (Supabase under the hood) for auth + database + edge functions.
+- New table `paid_access`: `user_id`, `email`, `stripe_session_id`, `paid_at`, `expires_at` (Dec 31 of paid_at's year), `status`. RLS: user can read their own row only.
+- Auth: email/password + Google sign-in enabled.
+- **Signup is gated**: a database trigger / edge function rejects sign-up attempts whose email has no matching `paid_access` row with a valid `stripe_session_id`. No open self-serve registration.
 
-```
-src/data/
-  raw/
-    bbm-ii.csv          ← committed for auditability, not imported by app
-    bbm-iii.csv
-    bbm-iv.csv
-    bbm-v.csv
-  bbm-finalist-history.ts ← the only file the app imports
-```
+### 2. Stripe (built-in Lovable Payments — Stripe)
+- Enable Lovable's seamless Stripe integration (no API keys needed, sandbox mode immediately, claim account later to go live).
+- Create one product: **BBM Draft Scheduler — Season Pass**, one-time $25.
+- Edge function `create-checkout`: creates a Stripe Checkout Session for the $25 product, success URL → `/welcome?session_id={CHECKOUT_SESSION_ID}`.
+- Edge function `verify-checkout` (called from `/welcome`): looks up the session, confirms `payment_status === "paid"`, inserts a `paid_access` row keyed by email with `expires_at = Dec 31 of current year`.
+- Edge function `check-access` (called on login): returns `{ hasAccess: boolean, expiresAt }` for current user.
 
-`bbm-finalist-history.ts` exports, per-year and combined:
-- daily counts indexed from each year's BBM open day through that year's last finalist fill
-- monthly breakdown (April–September): count + pct
-- earliest finalist fill date and latest finalist fill date
-- a **combined 4-year-average daily distribution** normalized onto a common month-of-year axis (so years with different open dates align), used by the scheduler
-- a combined monthly breakdown averaging the 4 years
+### 3. Frontend changes
+- **Top-right auth widget** in `src/routes/__root.tsx` (or a header component): "Sign in" when logged out, email + "Sign out" when logged in. Uses shadcn `DropdownMenu`.
+- **New routes**:
+  - `/login` — email/password + Google buttons. Sign-up tab is hidden; sign-up only reachable post-payment.
+  - `/welcome` — post-checkout account creation: takes `session_id`, calls `verify-checkout`, then shows "Set a password" form (or Google link button) pre-filled with the Stripe email.
+- **Paywall on `/`**:
+  - Form (`SchedulerForm`) — always interactive.
+  - On submit, results render as today, but wrapped in a `<PaywallGate>` component for non-paying users.
+  - `PaywallGate` renders children with `filter: blur(8px)` + `pointer-events-none`, overlays a centered card with the marketing copy and a **"Unlock for $25"** button → calls `create-checkout` → redirects to Stripe.
+  - Applied to: the bullet lists inside `ScheduleAnalysis` (Optimal Strategy details, Finalist Draft History, Suggestions). Headlines/section titles stay sharp.
+  - Applied to: calendar months **after May** in `ScheduleCalendar` (April + May render normally; June–September are each wrapped in the gate, but a single overlay button is shown for the whole blurred region).
+- **Access detection**: a `useAccess()` hook reads `paid_access` for the signed-in user; `PaywallGate` skips blur when `hasAccess === true`.
 
-## Changes
+## Technical Details
 
-### 1. Pull and embed the data
-- Fetch each tab as CSV (already verified accessible).
-- Save raw CSVs to `src/data/raw/`.
-- Build `src/data/bbm-finalist-history.ts` with the aggregates above. All numbers derived from the CSVs — no hand-tuning.
+- `ScheduleCalendar.tsx` already renders months in a grid loop. We split the months array into `[unlocked = first 2 months in range that are April/May, locked = rest]` and wrap the locked set in one relative container + overlay so a single CTA covers all blurred months.
+- `ScheduleAnalysis.tsx` keeps headlines outside the gate; each `<ul>` is wrapped in `<PaywallGate>`. A single overlay spans all three blurred lists so the CTA only appears once.
+- Stripe session email becomes the canonical account email — `/welcome` enforces that the password/Google account is created with that same email so `paid_access.email` matches `auth.users.email`.
+- Sign-up gate implemented as a Postgres trigger on `auth.users` insert: raise an exception unless a `paid_access` row exists for the new user's email with a non-null `stripe_session_id`. This blocks the Supabase signup UI and any direct API calls.
+- Expiration: server-side check in `check-access` compares `now()` to `expires_at`; client never decides access on its own.
 
-### 2. Rewrite `src/lib/historical-config.ts`
-- Re-export from `bbm-finalist-history.ts` instead of holding inline arrays.
-- `FINALIST_DRAFT_DISTRIBUTION` becomes the **4-year average** daily weights.
-- `EARLIEST_HISTORICAL_FILL_MMDD` becomes the earliest finalist fill across all 4 years.
-- `LATEST_COMPLETION_MMDD` becomes the latest finalist fill across all 4 years.
-- `FINALIST_MONTH_BREAKDOWN` becomes the 4-year averaged monthly pcts.
-- Add new export `FINALIST_HISTORY_BY_YEAR: { year, label, total, monthly: MonthBreakdownEntry[], earliest, latest }[]` for the UI.
+## Out of Scope (this plan)
+- Subscription renewals / auto-renew (it's a one-time charge each year; users repurchase after Dec 31).
+- Admin dashboard, refunds UI, coupon codes.
+- Going live on Stripe — sandbox works immediately; switching to live mode is a one-click claim later.
 
-### 3. Update `src/lib/analysis.ts`
-- `historyBullets` becomes a **combined table-style list**, one bullet per month, comparing all 4 years + average. Format:
-  - `August: 47% / 50% / 49% / 50% — avg 49% (BBM II / III / IV / V)`
-- `suggestionBullets` keeps the same dynamic logic but cites the 4-year average pct (e.g., "~30% of finalists across BBM II–V were drafted before June 15").
-- `details` (the top window-fit bullets) now reference "BBM II–V" instead of "BBM V".
-
-### 4. Update `src/components/scheduler/ScheduleAnalysis.tsx`
-- Section title: **"Finalist draft history (BBM II–V, 2021–2024)"**
-- Subtitle updates to: `Combined across {total} finalist drafts over 4 BBM seasons, by month of draft_filled_time.`
-- Bullet list renders the new combined-row format. No layout change beyond text.
-
-## Out of scope
-
-- Charts / per-year toggles in the UI (you chose the single combined bullet list).
-- Re-fetching the sheet at runtime (everything is embedded).
-- Backfilling BBM I (not in your sheet).
-
-## Technical notes
-
-- The 4 years have different open dates (NFL Draft moves yearly). The combined daily curve aligns on **calendar month-day** (e.g., July 15 in BBM II maps to July 15 in BBM V), not on "day-since-open." Date pickers and the scheduler already operate in calendar dates, so this matches.
-- Earliest/latest pickers will widen vs today's bounds (currently `06-02` → `08-31` from BBM V only). Expect both ends to shift outward once older years are included.
-- The pre-aggregation runs once during implementation via a small Node/Python script in `/tmp/`; only the generated `.ts` file ships in the app.
+## What I'll Need From You During Build
+- Confirmation to enable **Lovable Cloud** (one click).
+- Confirmation to enable **Lovable Payments (Stripe)** (one click; no API keys needed).
+- Product name/description for the Stripe product (I'll suggest one; you can tweak).
