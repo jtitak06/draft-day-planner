@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      paid_access: {
+        Row: {
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          paid_at: string
+          stripe_session_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          paid_at?: string
+          stripe_session_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          paid_at?: string
+          stripe_session_id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
