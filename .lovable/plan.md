@@ -1,57 +1,58 @@
-# Monetize the BBM Scheduler
+# Wire the Stripe Payment Link to Account Creation
 
-Turn the app into a paid tool: free visitors can use the form and see a blurred preview of results; a one-time $25 payment unlocks full results through December 31 of the current year. Accounts can only be created after payment.
+You've created a Stripe Payment Link (`buy.stripe.com/14A14o...`). Since this is a hosted Stripe Payment Link (not a Checkout Session we create from code), the integration shape is different from the original plan — we'll drive everything off a **Stripe webhook** plus a **confirmation page redirect**.
 
-## User Flow
+## How It Will Work
 
-1. Visitor lands on `/` — form is fully usable, "Sign in" button in top-right.
-2. They click **Generate schedule** → results render, but bullet lists and June–September calendar months are blurred with a CTA overlay: *"For the cost of 1 best ball entry, you can have a draft-window-optimized portfolio of 150 teams. Unlock full results — $25."*
-3. CTA → Stripe Checkout ($25, one-time). Email is collected by Stripe.
-4. On payment success → user lands on `/welcome?session_id=...` → sets a password (or links Google) → account created, marked paid through Dec 31.
-5. Returning paid users sign in (email/password or Google) and see everything unblurred until their access expires.
+1. Visitor clicks **Unlock for $25** on the paywall → opens your Payment Link (`https://buy.stripe.com/14A14o1sI5VRdYf4Mw0oM00`) in a new tab/redirect.
+2. Stripe collects their email + payment.
+3. **Two things happen on success:**
+   - **Stripe → our webhook** at `/api/public/stripe-webhook` fires a `checkout.session.completed` event. We verify the signature, extract `customer_email` + `session.id`, and insert a `paid_access` row (email, stripe_session_id, paid_at, expires_at = Dec 31 of current year).
+   - **Stripe → user's browser** redirects to a confirmation URL we configure on the Payment Link: `https://<your-domain>/welcome?session_id={CHECKOUT_SESSION_ID}`.
+4. `/welcome` reads the `session_id`, calls a server function `verify-checkout` that looks up the `paid_access` row by `stripe_session_id`. If found → shows "Set your password" form pre-filled with the Stripe email. If not found yet (webhook hasn't landed) → polls every 1s for up to ~10s.
+5. User sets password → `auth.signUp({ email, password })` creates the account. A database trigger on `auth.users` allows this signup *only because* a `paid_access` row already exists for that email. The trigger also stamps `paid_access.user_id` so we can query access by user.
+6. Returning visit: user signs in at `/login` (email/password or Google). `useAccess()` hook checks `paid_access` for their user_id — if `expires_at > now()`, paywall is removed everywhere.
 
-## What Gets Built
+## What You'll Need to Do (3 quick things)
 
-### 1. Backend (Lovable Cloud)
-- Enable Lovable Cloud (Supabase under the hood) for auth + database + edge functions.
-- New table `paid_access`: `user_id`, `email`, `stripe_session_id`, `paid_at`, `expires_at` (Dec 31 of paid_at's year), `status`. RLS: user can read their own row only.
-- Auth: email/password + Google sign-in enabled.
-- **Signup is gated**: a database trigger / edge function rejects sign-up attempts whose email has no matching `paid_access` row with a valid `stripe_session_id`. No open self-serve registration.
+1. **In your Stripe Payment Link settings** → "After payment" → set **"Don't show confirmation page, redirect to your website"** → URL: `https://<your-lovable-domain>/welcome?session_id={CHECKOUT_SESSION_ID}`. (I'll give you the exact URL after we know your published domain — for testing the preview URL works too.)
+2. **In Stripe Dashboard → Developers → Webhooks** → add endpoint pointing to `https://<your-lovable-domain>/api/public/stripe-webhook`, subscribing to `checkout.session.completed`. Copy the signing secret.
+3. **Provide two secrets** when I prompt: `STRIPE_SECRET_KEY` (Dashboard → Developers → API keys) and `STRIPE_WEBHOOK_SECRET` (from the webhook you create in step 2).
 
-### 2. Stripe (built-in Lovable Payments — Stripe)
-- Enable Lovable's seamless Stripe integration (no API keys needed, sandbox mode immediately, claim account later to go live).
-- Create one product: **BBM Draft Scheduler — Season Pass**, one-time $25.
-- Edge function `create-checkout`: creates a Stripe Checkout Session for the $25 product, success URL → `/welcome?session_id={CHECKOUT_SESSION_ID}`.
-- Edge function `verify-checkout` (called from `/welcome`): looks up the session, confirms `payment_status === "paid"`, inserts a `paid_access` row keyed by email with `expires_at = Dec 31 of current year`.
-- Edge function `check-access` (called on login): returns `{ hasAccess: boolean, expiresAt }` for current user.
+## What I'll Build
 
-### 3. Frontend changes
-- **Top-right auth widget** in `src/routes/__root.tsx` (or a header component): "Sign in" when logged out, email + "Sign out" when logged in. Uses shadcn `DropdownMenu`.
-- **New routes**:
-  - `/login` — email/password + Google buttons. Sign-up tab is hidden; sign-up only reachable post-payment.
-  - `/welcome` — post-checkout account creation: takes `session_id`, calls `verify-checkout`, then shows "Set a password" form (or Google link button) pre-filled with the Stripe email.
-- **Paywall on `/`**:
-  - Form (`SchedulerForm`) — always interactive.
-  - On submit, results render as today, but wrapped in a `<PaywallGate>` component for non-paying users.
-  - `PaywallGate` renders children with `filter: blur(8px)` + `pointer-events-none`, overlays a centered card with the marketing copy and a **"Unlock for $25"** button → calls `create-checkout` → redirects to Stripe.
-  - Applied to: the bullet lists inside `ScheduleAnalysis` (Optimal Strategy details, Finalist Draft History, Suggestions). Headlines/section titles stay sharp.
-  - Applied to: calendar months **after May** in `ScheduleCalendar` (April + May render normally; June–September are each wrapped in the gate, but a single overlay button is shown for the whole blurred region).
-- **Access detection**: a `useAccess()` hook reads `paid_access` for the signed-in user; `PaywallGate` skips blur when `hasAccess === true`.
+### Backend (Lovable Cloud — already enabled)
 
-## Technical Details
+- **Migration**: `paid_access` table — `id`, `user_id` (nullable until signup links it), `email` (unique), `stripe_session_id` (unique), `paid_at`, `expires_at`, `created_at`. RLS: users can `SELECT` only rows where `user_id = auth.uid()`.
+- **Database trigger** `restrict_signup_to_paid_emails` on `auth.users` BEFORE INSERT: raise exception unless a `paid_access` row exists for `NEW.email`. Also writes `NEW.id` into that row's `user_id`. This is the "no account without payment" gate.
+- **Server route** `/api/public/stripe-webhook` (TanStack server route — `/api/public/*` bypasses auth on published sites): verifies Stripe signature with `STRIPE_WEBHOOK_SECRET`, handles `checkout.session.completed`, upserts `paid_access` keyed by `stripe_session_id`.
+- **Server function** `verifyCheckout({ sessionId })`: uses service-role client to look up `paid_access` by `stripe_session_id`, returns `{ email, found }`. Client polls this after redirect.
+- **Server function** `getMyAccess()` (auth middleware): returns `{ hasAccess, expiresAt }` for the signed-in user.
 
-- `ScheduleCalendar.tsx` already renders months in a grid loop. We split the months array into `[unlocked = first 2 months in range that are April/May, locked = rest]` and wrap the locked set in one relative container + overlay so a single CTA covers all blurred months.
-- `ScheduleAnalysis.tsx` keeps headlines outside the gate; each `<ul>` is wrapped in `<PaywallGate>`. A single overlay spans all three blurred lists so the CTA only appears once.
-- Stripe session email becomes the canonical account email — `/welcome` enforces that the password/Google account is created with that same email so `paid_access.email` matches `auth.users.email`.
-- Sign-up gate implemented as a Postgres trigger on `auth.users` insert: raise an exception unless a `paid_access` row exists for the new user's email with a non-null `stripe_session_id`. This blocks the Supabase signup UI and any direct API calls.
-- Expiration: server-side check in `check-access` compares `now()` to `expires_at`; client never decides access on its own.
+### Frontend
+
+- **`/welcome` route**: reads `?session_id=`, polls `verifyCheckout`, shows email + "Set password" form, calls `supabase.auth.signUp({ email, password })`, then redirects to `/`. Google sign-in button also available — uses same email or links via `auth.linkIdentity`.
+- **`/login` route**: email/password + Google buttons. No sign-up tab (signup is paywall-gated).
+- **Header** (in `__root.tsx`): "Sign in" link top-right when logged out; email + sign-out dropdown when logged in.
+- **`<PaywallGate>`**: wraps children with blur + pointer-events-none and a centered CTA card *"For the cost of 1 best ball entry, you can have a draft-window-optimized portfolio of 150 teams. Unlock for $25"* → links to your Stripe Payment Link. Skips blur when `useAccess().hasAccess === true`.
+- **`ScheduleAnalysis.tsx`**: keep section titles/headlines sharp; wrap the three bullet lists in one `<PaywallGate>` with a single CTA spanning the region.
+- **`ScheduleCalendar.tsx`**: render April + May normally; wrap June–September months in a single `<PaywallGate>` region with one CTA.
+- **`useAccess()` hook**: queries `getMyAccess` via React Query, caches result.
+
+## Edge Cases I'll Handle
+
+- **Webhook arrives before user finishes signing up** (common): `verify-checkout` poll picks up the row as soon as it's written; signup trigger sees it and allows account creation.
+- **User closes tab before signing up**: their `paid_access` row is already created (user_id null). When they return and try to sign up at `/login` → I'll add a "Finish setting up your account" link that asks for the paid email + sends a magic-link sign-up — same trigger gate applies.
+- **Google sign-in with a Gmail address that differs from Stripe email**: signup trigger rejects it with a clear message ("Use the email you paid with: ***@***"). User can re-try with the right Google account.
+- **Webhook signature failure**: returns 401, Stripe retries automatically.
+
+## What I Cannot Do From Code
+- Configuring the Payment Link's confirmation redirect URL — you do this in Stripe Dashboard.
+- Creating the webhook endpoint in Stripe — you do this in Stripe Dashboard and paste the signing secret when I prompt.
 
 ## Out of Scope (this plan)
-- Subscription renewals / auto-renew (it's a one-time charge each year; users repurchase after Dec 31).
-- Admin dashboard, refunds UI, coupon codes.
-- Going live on Stripe — sandbox works immediately; switching to live mode is a one-click claim later.
+- Auto-renewal / subscription billing (still one-time, expires Dec 31).
+- Magic-link / passwordless flow (only if you want it later).
+- Refunds, coupons, admin dashboard.
 
-## What I'll Need From You During Build
-- Confirmation to enable **Lovable Cloud** (one click).
-- Confirmation to enable **Lovable Payments (Stripe)** (one click; no API keys needed).
-- Product name/description for the Stripe product (I'll suggest one; you can tweak).
+Ready to implement? On approval I'll: run the DB migration, ask you for the two Stripe secrets, build the webhook + server functions + paywall UI + auth pages, then walk you through the two Stripe Dashboard config steps.

@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.handle_new_user_paid_gate() FROM PUBLIC, anon, authenticated;
