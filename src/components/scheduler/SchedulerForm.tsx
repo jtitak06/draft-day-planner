@@ -95,7 +95,12 @@ export function SchedulerForm({ onSubmit }: Props) {
               {endDate ? format(endDate, "PPP") : "Pick a date"}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
+          <PopoverContent
+            className="w-auto p-0"
+            align="start"
+            side="bottom"
+            avoidCollisions={false}
+          >
             <Calendar
               mode="single"
               selected={endDate}
