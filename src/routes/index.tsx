@@ -122,6 +122,8 @@ function Index() {
                   <ScheduleAnalysis
                     analysis={analysis}
                     blurDetails={!hasAccess}
+                    purchaseUrl={STRIPE_CHECKOUT_URL}
+                    isSignedIn={Boolean(user)}
                   />
                 </section>
               )}
