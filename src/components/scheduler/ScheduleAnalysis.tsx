@@ -2,9 +2,12 @@ import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import type { WindowAnalysis } from "@/lib/analysis";
 import { cn } from "@/lib/utils";
 
-type Props = { analysis: WindowAnalysis };
+type Props = { analysis: WindowAnalysis; blurDetails?: boolean };
 
-export function ScheduleAnalysis({ analysis }: Props) {
+export function ScheduleAnalysis({ analysis, blurDetails = false }: Props) {
+  const blur = blurDetails
+    ? "pointer-events-none select-none blur-sm"
+    : "";
   const Icon =
     analysis.severity === "optimal"
       ? CheckCircle2
@@ -32,7 +35,13 @@ export function ScheduleAnalysis({ analysis }: Props) {
         />
         <div className="space-y-2">
           <p className="font-medium text-foreground">{analysis.headline}</p>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          <ul
+            className={cn(
+              "list-disc space-y-1 pl-5 text-sm text-muted-foreground",
+              blur,
+            )}
+            aria-hidden={blurDetails}
+          >
             {analysis.details.map((d, i) => (
               <li key={i}>{d}</li>
             ))}
@@ -50,7 +59,13 @@ export function ScheduleAnalysis({ analysis }: Props) {
         <code>draft_filled_time</code>; BBM II–III use <code>draft_time</code>{" "}
         (fill time isn't available in those years).
       </p>
-      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+      <ul
+        className={cn(
+          "mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground",
+          blur,
+        )}
+        aria-hidden={blurDetails}
+      >
         {analysis.historyBullets.map((b, i) => (
           <li key={i}>{b}</li>
         ))}
@@ -59,7 +74,13 @@ export function ScheduleAnalysis({ analysis }: Props) {
 
     <div className="rounded-lg border bg-card p-5">
       <p className="font-medium text-foreground">Suggestions for your window</p>
-      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+      <ul
+        className={cn(
+          "mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground",
+          blur,
+        )}
+        aria-hidden={blurDetails}
+      >
         {analysis.suggestionBullets.map((b, i) => (
           <li key={i}>{b}</li>
         ))}

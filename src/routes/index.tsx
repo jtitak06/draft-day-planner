@@ -12,6 +12,12 @@ import {
   getLatestCompletionDate,
 } from "@/lib/historical-config";
 import { analyzeWindow, type WindowAnalysis } from "@/lib/analysis";
+import { AuthHeader } from "@/components/AuthHeader";
+import { useAccess } from "@/hooks/use-access";
+import { Button } from "@/components/ui/button";
+import { Lock } from "lucide-react";
+
+const STRIPE_CHECKOUT_URL = "https://buy.stripe.com/14A14o1sI5VRdYf4Mw0oM00";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -31,6 +37,7 @@ function Index() {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [analysis, setAnalysis] = useState<WindowAnalysis | null>(null);
   const [completedCount, setCompletedCount] = useState<number>(0);
+  const { hasAccess, user, accessLoading } = useAccess();
 
   const handleSubmit = (values: SchedulerFormValues) => {
     const cycleStart = getCurrentBbmOpenDate();
@@ -58,6 +65,7 @@ function Index() {
 
   return (
     <main className="min-h-screen bg-background">
+      <AuthHeader />
       <div className="mx-auto max-w-6xl px-4 py-10 sm:py-16">
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -103,7 +111,7 @@ function Index() {
                   </span>
                   .
                 </div>
-                <ExportCsvButton schedule={schedule} />
+                {hasAccess && <ExportCsvButton schedule={schedule} />}
               </section>
 
               {analysis && (
@@ -111,7 +119,10 @@ function Index() {
                   <h2 className="mb-3 text-lg font-semibold text-foreground">
                     Analysis
                   </h2>
-                  <ScheduleAnalysis analysis={analysis} />
+                  <ScheduleAnalysis
+                    analysis={analysis}
+                    blurDetails={!hasAccess}
+                  />
                 </section>
               )}
 
@@ -119,12 +130,56 @@ function Index() {
                 <h2 className="mb-3 text-lg font-semibold text-foreground">
                   Calendar
                 </h2>
-                <ScheduleCalendar schedule={schedule} />
+                <div className="relative">
+                  <div
+                    className={
+                      hasAccess
+                        ? undefined
+                        : "pointer-events-none select-none blur-md"
+                    }
+                    aria-hidden={!hasAccess}
+                  >
+                    <ScheduleCalendar schedule={schedule} />
+                  </div>
+                  {!hasAccess && !accessLoading && (
+                    <PaywallOverlay isSignedIn={Boolean(user)} />
+                  )}
+                </div>
               </section>
             </>
           )}
         </div>
       </div>
     </main>
+  );
+}
+
+function PaywallOverlay({ isSignedIn }: { isSignedIn: boolean }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-6">
+      <div className="max-w-md rounded-lg border bg-card/95 p-6 text-center shadow-lg backdrop-blur">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+          <Lock className="h-5 w-5 text-primary" />
+        </div>
+        <h3 className="mt-3 text-lg font-semibold text-foreground">
+          Unlock your full draft schedule
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Get the complete draft-by-draft calendar and detailed
+          recommendations for the rest of the BBM season — one payment of
+          $25, access through Dec 31.
+        </p>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Button asChild>
+            <a href={STRIPE_CHECKOUT_URL}>Purchase access — $25</a>
+          </Button>
+          {!isSignedIn && (
+            <Button asChild variant="outline">
+              <a href="/login">I already paid · Sign in</a>
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
