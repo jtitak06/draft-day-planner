@@ -121,6 +121,10 @@ function WelcomePage() {
               <span className="font-medium text-foreground">{email}</span>. Access
               is active for the rest of the calendar year.
             </p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              We've also emailed you a link to set your password — check your
+              inbox if you'd rather finish setup later.
+            </p>
 
             {hasAccount ? (
               <div className="mt-6 space-y-3">
