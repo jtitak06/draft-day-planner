@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,6 +19,11 @@ import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/welcome': typeof WelcomeRoute
   '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/welcome': typeof WelcomeRoute
   '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
 }
@@ -60,6 +68,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
+  '/terms': typeof TermsRoute
   '/welcome': typeof WelcomeRoute
   '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
 }
@@ -69,15 +78,23 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/privacy'
+    | '/terms'
     | '/welcome'
     | '/api/public/stripe-webhook'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/privacy' | '/welcome' | '/api/public/stripe-webhook'
+  to:
+    | '/'
+    | '/login'
+    | '/privacy'
+    | '/terms'
+    | '/welcome'
+    | '/api/public/stripe-webhook'
   id:
     | '__root__'
     | '/'
     | '/login'
     | '/privacy'
+    | '/terms'
     | '/welcome'
     | '/api/public/stripe-webhook'
   fileRoutesById: FileRoutesById
@@ -86,6 +103,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
+  TermsRoute: typeof TermsRoute
   WelcomeRoute: typeof WelcomeRoute
   ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
 }
@@ -97,6 +115,13 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -134,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
   WelcomeRoute: WelcomeRoute,
   ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
 }
