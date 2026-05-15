@@ -13,6 +13,7 @@ import {
 } from "@/lib/historical-config";
 import { analyzeWindow, type WindowAnalysis } from "@/lib/analysis";
 import { AuthHeader } from "@/components/AuthHeader";
+import { SiteFooter } from "@/components/SiteFooter";
 import { useAccess } from "@/hooks/use-access";
 import { Button } from "@/components/ui/button";
 import { Lock } from "lucide-react";
@@ -152,6 +153,7 @@ function Index() {
           )}
         </div>
       </div>
+      <SiteFooter />
     </main>
   );
 }
