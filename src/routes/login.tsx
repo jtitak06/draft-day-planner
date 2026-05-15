@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in · BBM Draft Scheduler" }] }),
@@ -42,8 +43,9 @@ function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-sm">
+    <main className="flex min-h-screen flex-col bg-background">
+      <div className="flex flex-1 items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md rounded-lg border bg-card p-6 shadow-sm">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           Sign in
         </h1>
@@ -106,7 +108,9 @@ function LoginPage() {
             .
           </p>
         </div>
+        </div>
       </div>
+      <SiteFooter />
     </main>
   );
 }
